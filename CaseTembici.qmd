@@ -1,0 +1,1519 @@
+---
+title: "Hybrid Recommender System for E-commerce (End-to-End)"
+author: "Gabriel Ferreira"
+date: "2025-12-19"
+format:
+  html:
+    page-layout: full
+    code-fold: true
+    code-summary: "Show Code"
+    toc: true
+    toc-depth: 1
+    toc-title: "Project Index"
+    anchor-sections: false
+engine: jupytern
+jupyter: python3
+---
+
+# Introduction
+
+This project presents the development of a hybrid recommender system for e-commerce, covering the entire lifecycle of a Machine Learning solution applied in a real-world business context.
+
+The main objective is to increase conversion rate and average order value through personalized recommendations, leveraging multiple complementary signals:
+
+* historical purchase behavior (Collaborative Filtering),
+* semantic similarity between products (Content-Based),
+* explicit co-occurrence patterns in shopping baskets (Association Rules).
+
+---
+
+# Project Structure
+
+The pipeline follows a typical end-to-end architecture for modern recommender systems:
+
+1. Business problem definition
+2. Database creation and data ingestion
+3. SQL exploration and validation
+4. Data cleaning and preprocessing
+5. Feature engineering and modeling (CF, CB, AR)
+6. Hybrid model construction
+7. Evaluation and interpretation
+8. Artifact preparation
+9. Deployment (AWS S3, Lambda, API Gateway)
+
+This structure ensures a clear separation between data, models, and inference, facilitating maintenance and scalability.
+
+---
+
+# Business Objectives
+
+Increase recommendation relevance to drive:
+
+* AOV (Average Order Value),
+* conversion rate,
+* recommendation CTR,
+* incremental revenue.
+
+---
+
+# Data Sources
+
+The data represents a typical transactional e-commerce environment, with normalized tables reflecting standard practices for analytical storage and processing.
+
+The dataset includes:
+
+* item-level transaction history,
+* product catalog with descriptive attributes,
+* product view events,
+* basic customer demographic information,
+* temporal records for behavioral analysis.
+
+---
+
+## Database Setup & SQL Exploration
+
+Before any modeling step in Python, the data undergoes a structuring, ingestion, and validation process in a relational database, typical of real-world analytics environments in e-commerce.
+
+### Entity-Relationship (ER) Diagram
+
+The diagram below illustrates the relational database model, highlighting core entities such as customers, products, transactions, and views, as well as their relationships.
+
+
+**Database ER Diagram**
+
+![](ER-diagram.png)
+
+
+### Data Ingestion & Validation in MySQL
+
+After defining the schema, the tables are created and data is loaded directly into the database using command-line tools and MySQL Workbench, reproducing common ingestion practices in analytical environments.
+
+
+##### Database and table creation:
+<details>
+<summary><strong>Show SQL Schema</strong></summary>
+
+```sql
+-- =========================================================
+-- Criar banco de dados
+-- =========================================================
+CREATE DATABASE IF NOT EXISTS ecommerce_db
+  DEFAULT CHARACTER SET utf8mb4
+  DEFAULT COLLATE utf8mb4_unicode_ci;
+
+USE ecommerce_db;
+
+-- =========================================================
+-- Tabela: customers
+-- =========================================================
+CREATE TABLE IF NOT EXISTS customers (
+    customer_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(150) UNIQUE,
+    gender ENUM('M','F','O') NULL,
+    age TINYINT UNSIGNED NULL,
+    city VARCHAR(100) NULL,
+    state VARCHAR(50) NULL,
+    registration_date DATETIME NOT NULL,
+    PRIMARY KEY (customer_id)
+) ENGINE=InnoDB;
+
+-- =========================================================
+-- Tabela: products
+-- =========================================================
+CREATE TABLE IF NOT EXISTS products (
+    product_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    name VARCHAR(150) NOT NULL,
+    category VARCHAR(100) NOT NULL,
+    brand VARCHAR(100) NULL,
+    price DECIMAL(10,2) NOT NULL,
+    created_at DATETIME NOT NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    PRIMARY KEY (product_id),
+    INDEX idx_products_category (category),
+    INDEX idx_products_brand (brand)
+) ENGINE=InnoDB;
+
+-- =========================================================
+-- Tabela: transactions
+-- =========================================================
+CREATE TABLE IF NOT EXISTS transactions (
+    transaction_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    customer_id INT UNSIGNED NOT NULL,
+    product_id INT UNSIGNED NOT NULL,
+    quantity INT UNSIGNED NOT NULL DEFAULT 1,
+    total_value DECIMAL(10,2) NOT NULL,
+    transaction_date DATETIME NOT NULL,
+    
+    PRIMARY KEY (transaction_id),
+    
+    INDEX idx_transactions_customer (customer_id),
+    INDEX idx_transactions_product (product_id),
+    INDEX idx_transactions_date (transaction_date),
+    
+    CONSTRAINT fk_transactions_customer
+        FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
+        ON DELETE CASCADE,
+        
+    CONSTRAINT fk_transactions_product
+        FOREIGN KEY (product_id) REFERENCES products(product_id)
+        ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
+-- =========================================================
+-- Tabela: product_views
+-- =========================================================
+CREATE TABLE IF NOT EXISTS product_views (
+    view_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    customer_id INT UNSIGNED NOT NULL,
+    product_id INT UNSIGNED NOT NULL,
+    view_datetime DATETIME NOT NULL,
+    session_id VARCHAR(100) NULL,
+    device_type ENUM('desktop','mobile','tablet') NULL,
+    
+    PRIMARY KEY (view_id),
+    
+    INDEX idx_views_customer (customer_id),
+    INDEX idx_views_product (product_id),
+    INDEX idx_views_datetime (view_datetime),
+    
+    CONSTRAINT fk_views_customer
+        FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
+        ON DELETE CASCADE,
+        
+    CONSTRAINT fk_views_product
+        FOREIGN KEY (product_id) REFERENCES products(product_id)
+        ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
+-- =========================================================
+-- Verificação final
+-- =========================================================
+SHOW TABLES;
+
+DESCRIBE customers;
+DESCRIBE products;
+DESCRIBE transactions;
+DESCRIBE product_views;
+```
+</details>
+
+---
+
+##### Loading data into the database via command line:
+
+{{< video SQL-DB-CREATION.mp4 >}}
+
+##### Execution of initial exploratory queries:
+
+{{< video SQL-QUERIES.mp4 >}}
+
+---
+
+# EDA (Exploratory Data Analysis)
+
+```{python}
+#| include: false
+from getpass import getpass
+import os
+import pandas as pd
+import numpy as np
+from sqlalchemy import create_engine, text
+import matplotlib.pyplot as plt
+from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.feature_extraction.text import TfidfVectorizer
+from collections import defaultdict
+import random
+from mlxtend.preprocessing import TransactionEncoder
+from mlxtend.frequent_patterns import apriori
+from mlxtend.frequent_patterns import association_rules
+import pickle
+```
+
+```{python}
+#| include: false
+# Conectar no SQL
+DB_USER = "root"
+DB_HOST = "127.0.0.1"
+DB_PORT = 3306
+DB_NAME = "ecommerce_db"
+DB_PASS = "********"
+
+CONN_STR = f"mysql+pymysql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+engine = create_engine(CONN_STR, echo=False)
+
+# Pra reprodutibilidade
+SEED = 42
+np.random.seed(SEED)
+random.seed(SEED)
+```
+
+##### Python Function to run pure SQL on notebook:
+```{python}
+def run_sql_pure(sql: str, params: dict = None):
+    """
+    Executa SQL puro (string) e retorna um pandas.DataFrame.
+    Exibe a query e retorna o DataFrame.
+    """
+    print("---- Executing SQL ----")
+    print(sql.strip())
+    print("-----------------------")
+    df = pd.read_sql_query(sql=text(sql), con=engine, params=params)
+    display(df.head(10))
+    return df
+
+# Configuração do matplotlib
+plt.rcParams['figure.figsize'] = (10,5)
+plt.rcParams['grid.linestyle'] = '--'
+```
+
+---
+
+The first step of the EDA is to validate the structural integrity of the tables.
+
+##### Record counts per table:
+```{python}
+sql = """
+SELECT 
+  (SELECT COUNT(*) FROM customers) AS n_customers,
+  (SELECT COUNT(*) FROM products)  AS n_products,
+  (SELECT COUNT(*) FROM transactions) AS n_transactions,
+  (SELECT COUNT(*) FROM product_views) AS n_views;
+"""
+df = run_sql_pure(sql)
+vals = df.iloc[0].to_dict()
+names = list(vals.keys()); counts = list(vals.values())
+```
+<br>
+
+##### Missing values per table:
+```{python}
+# lista de tabelas a verificar
+tables = ['customers', 'products', 'transactions', 'product_views']
+
+results = []
+for t in tables:
+    q_cols = f"""
+    SELECT COLUMN_NAME
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = '{DB_NAME}'
+      AND TABLE_NAME = '{t}'
+    ORDER BY ORDINAL_POSITION;
+    """
+    cols_df = pd.read_sql_query(sql=text(q_cols), con=engine)
+    cols = cols_df['COLUMN_NAME'].tolist()
+    num_cols = len(cols)
+
+    # contar linhas
+    q_rows = f"SELECT COUNT(*) AS n_rows FROM {t};"
+    n_rows = pd.read_sql_query(sql=text(q_rows), con=engine).iloc[0,0]
+
+    if n_rows == 0 or num_cols == 0:
+        null_count = 0
+    else:
+        null_expr = " + ".join([f"SUM(`{c}` IS NULL)" for c in cols])
+        q_nulls = f"SELECT {null_expr} AS null_count FROM {t};"
+        null_count = pd.read_sql_query(sql=text(q_nulls), con=engine).iloc[0,0]
+
+    total_cells = int(n_rows) * int(num_cols)
+    pct_null = (null_count / total_cells * 100) if total_cells > 0 else 0.0
+
+    results.append({
+        "table": t,
+        "n_rows": int(n_rows),
+        "n_cols": int(num_cols),
+        "total_cells": int(total_cells),
+        "null_count": int(null_count),
+        "pct_null": round(pct_null, 4)
+    })
+
+df_missing_tables = pd.DataFrame(results)
+display(df_missing_tables)
+```
+<br>
+
+##### Duplicates and keys (primary key uniqueness check):
+```{python}
+sql = """
+SELECT 
+  COUNT(*) AS total_rows,
+  COUNT(DISTINCT transaction_id) AS distinct_transaction_id,
+  COUNT(DISTINCT CONCAT(customer_id,'-',DATE(transaction_date))) AS distinct_cust_date
+FROM transactions;
+"""
+df = run_sql_pure(sql)
+print(df.to_string(index=False))
+```
+<br>
+
+The results confirm that the data is complete and consistent, allowing the analysis to proceed without the need for structural data cleaning.
+
+---
+
+### Visualizations and Insights
+At this stage, we explore business behavior using SQL analyses.
+
+##### Product price distribution:
+```{python}
+sql = "SELECT price FROM products WHERE price IS NOT NULL;"
+df_price = run_sql_pure(sql)
+df_price['price'] = pd.to_numeric(df_price['price'], errors='coerce')
+plt.hist(df_price['price'].dropna(), bins=30)
+plt.title("Product Price Distribution")
+plt.xlabel("Price")
+plt.ylabel("Frequency")
+plt.show()
+```
+<br>
+
+##### Top products by quantity sold and by revenue:
+```{python}
+sql = """
+SELECT p.product_id, p.name,
+       SUM(t.quantity) AS total_qty,
+       SUM(t.total_value) AS total_revenue
+FROM transactions t
+JOIN products p ON t.product_id = p.product_id
+GROUP BY p.product_id
+ORDER BY total_qty DESC
+LIMIT 10;
+"""
+df_top = run_sql_pure(sql)
+ax = df_top.plot.bar(x='name', y='total_qty', legend=False)
+plt.xticks(rotation=70, fontsize=8)
+plt.title("Top 15 products by quantity sold")
+plt.ylabel("Quantity")
+plt.show()
+
+# revenue bar
+df_top.plot.bar(x='name', y='total_revenue')
+plt.xticks(rotation=70, fontsize=8)
+plt.title("Top 15 Revenue-Generating Products")
+plt.ylabel("Revenue")
+plt.show()
+```
+<br>
+
+##### Monthly sales:
+```{python}
+sql = """
+SELECT DATE_FORMAT(transaction_date, '%Y-%m') AS ym,
+       COUNT(*) AS n_items,
+       SUM(total_value) AS revenue
+FROM transactions
+GROUP BY ym
+ORDER BY ym;
+"""
+df_ts = run_sql_pure(sql)
+df_ts['ym'] = pd.to_datetime(df_ts['ym'] + '-01')
+plt.plot(df_ts['ym'], df_ts['revenue'])
+plt.title("Monthly Revenue")
+plt.xlabel("Month")
+plt.ylabel("Revenue")
+plt.grid(True)
+plt.show()
+```
+<br>
+
+##### RFM — table and histograms:
+```{python}
+sql = """
+WITH last AS (
+  SELECT customer_id,
+         DATEDIFF(CURDATE(), MAX(DATE(transaction_date))) AS recency_days,
+         COUNT(*) AS frequency,
+         SUM(total_value) AS monetary
+  FROM transactions
+  GROUP BY customer_id
+)
+SELECT * FROM last;
+"""
+df_rfm = run_sql_pure(sql)
+# Histograms
+fig, axes = plt.subplots(1,3, figsize=(15,4))
+axes[0].hist(df_rfm['recency_days'].dropna(), bins=20); axes[0].set_title('Recency (dias)')
+axes[1].hist(df_rfm['frequency'].dropna(), bins=20); axes[1].set_title('Frequency')
+axes[2].hist(df_rfm['monetary'].dropna(), bins=20); axes[2].set_title('Monetary')
+plt.show()
+
+# scatter recency x monetary
+plt.scatter(df_rfm['recency_days'], df_rfm['monetary'])
+plt.xlabel('Recency (days)'); plt.ylabel('Monetary (total_spent)')
+plt.title('Recency x Monetary (customer)')
+plt.grid(True)
+plt.show()
+```
+<br>
+
+##### Distribution of purchases per customer:
+```{python}
+sql = """
+SELECT customer_id, COUNT(*) AS purchases
+FROM transactions
+GROUP BY customer_id;
+"""
+df_purchases = run_sql_pure(sql)
+plt.hist(df_purchases['purchases'], bins=30)
+plt.title("Distribution of Purchases per Customer")
+plt.xlabel("Number of Purchases")
+plt.ylabel("customer")
+plt.show()
+```
+<br>
+
+##### View-to-purchase conversion by product
+```{python}
+sql = """
+SELECT p.product_id, p.name,
+  COALESCE(v.views,0) AS views,
+  COALESCE(b.buys,0)  AS buys,
+  ROUND(COALESCE(b.buys,0) / NULLIF(COALESCE(v.views,0),0) * 100,2) AS conversion_pct
+FROM products p
+LEFT JOIN (
+  SELECT product_id, COUNT(*) AS views
+  FROM product_views
+  GROUP BY product_id
+) v ON p.product_id = v.product_id
+LEFT JOIN (
+  SELECT product_id, COUNT(*) AS buys
+  FROM transactions
+  GROUP BY product_id
+) b ON p.product_id = b.product_id;
+"""
+df_conv = run_sql_pure(sql)
+plt.scatter(df_conv['views'], df_conv['buys'])
+plt.xlabel('Views'); plt.ylabel('Buys')
+plt.title('Views x Buys (products)')
+plt.grid(True)
+plt.show()
+```
+<br>
+
+##### Sales by category:
+```{python}
+sql = """
+SELECT p.category, COUNT(*) AS n_items, SUM(t.total_value) AS revenue
+FROM transactions t
+JOIN products p ON t.product_id = p.product_id
+GROUP BY p.category
+ORDER BY revenue DESC;
+"""
+df_cat = run_sql_pure(sql)
+df_cat.plot.bar(x='category', y='revenue')
+plt.title("Revenue per category")
+plt.xticks(rotation=60)
+plt.ylabel("Revenue")
+plt.show()
+```
+<br>
+
+##### AOV (Average Order Value):
+```{python}
+sql = """
+SELECT customer_id, DATE(transaction_date) AS order_date, SUM(total_value) AS order_value
+FROM transactions
+GROUP BY customer_id, DATE(transaction_date);
+"""
+df_orders = run_sql_pure(sql)
+aov = df_orders['order_value'].mean()
+print(f"Average Order Value (Approx.): R$ {aov:.2f}")
+plt.hist(df_orders['order_value'], bins=30)
+plt.title("Distribution of Order Value (Approx.)")
+plt.xlabel("Order value")
+plt.ylabel("Count")
+plt.show()
+```
+<br>
+
+##### Customer × product matrix — density (SPARSITY)
+```{python}
+sql = """
+SELECT (SELECT COUNT(DISTINCT customer_id) FROM transactions) AS n_customers_active,
+       (SELECT COUNT(DISTINCT product_id) FROM transactions) AS n_products_sold,
+       (SELECT COUNT(*) FROM transactions) AS n_transactions;
+"""
+df_dim = run_sql_pure(sql)
+n_customers = int(df_dim['n_customers_active'].iloc[0])
+n_products = int(df_dim['n_products_sold'].iloc[0])
+n_trans = int(df_dim['n_transactions'].iloc[0])
+possible = n_customers * n_products
+sparsity = 1 - (n_trans / possible)
+print(f"customer: {n_customers}, Products: {n_products}, Transactions: {n_trans}")
+print(f"Sparsity (aprox): {sparsity:.6f}")
+```
+
+---
+
+## Key Insights from EDA
+
+The analysis reveals important patterns:
+
+* high concentration of sales in a few categories,
+* customers with relatively high purchase frequency,
+* high sparsity (>90%) in the interaction matrix.
+
+These findings justify the choice of:
+
+* item-based models instead of user-based,
+* a hybrid approach to mitigate individual model limitations.
+
+---
+
+# Algorithm Development
+
+Based on the EDA, a hybrid architecture was defined where each component addresses a specific problem:
+
+| Component         | Role                               |
+| ----------------- | ---------------------------------- |
+| Item-Item CF      | Behavior-based personalization     |
+| Content-Based     | Semantic similarity and cold start |
+| Association Rules | Contextual cross-sell              |
+
+The goal is not to replace models, but to **combine complementary signals**.
+
+## Item-Item Collaborative Filtering
+
+At this stage, we build a recommender system based exclusively on historical purchase patterns. Item-Item CF recommends items similar to those already purchased by the user, measuring similarity between items based on user behavior (users who bought A also bought B).
+
+```{python}
+#| include: false
+# Carregando Datasets
+customers = pd.read_csv("customers.csv")
+products = pd.read_csv("products.csv")
+transactions = pd.read_csv("transactions.csv")
+views = pd.read_csv("product_views.csv")
+```
+
+##### Create the interaction dataset (customer × product):
+```{python}
+interactions = (
+    transactions[['customer_id', 'product_id']]
+    .drop_duplicates()
+)
+interactions['interaction'] = 1
+interactions.head()
+```
+<br>
+
+##### Build the Item × Customer matrix:
+```{python}
+item_user_matrix = interactions.pivot_table(
+    index='product_id',
+    columns='customer_id',
+    values='interaction',
+    fill_value=0
+)
+
+item_user_matrix.shape
+```
+<br>
+
+##### Check sparsity:
+```{python}
+density = item_user_matrix.values.sum() / item_user_matrix.size
+sparsity = 1 - density
+
+print(f"Sparsity: {sparsity:.4f}")
+```
+<br>
+
+##### Compute Item-Item similarity (Cosine):
+```{python}
+item_similarity = cosine_similarity(item_user_matrix)
+
+item_sim_df = pd.DataFrame(
+    item_similarity,
+    index=item_user_matrix.index,
+    columns=item_user_matrix.index
+)
+
+item_sim_df.iloc[:5, :5]
+```
+<br>
+
+##### Co-occurrence
+```{python}
+cooccurrence = item_user_matrix @ item_user_matrix.T
+```
+<br>
+
+##### Shrinkage
+```{python}
+LAMBDA = 10
+shrunk_similarity = item_sim_df * (cooccurrence / (cooccurrence + LAMBDA))
+```
+<br>
+
+##### Recommendation function (Item-Item CF)
+```{python}
+# Função de Recomendação (Item-Item CF)
+def recommend_item_item(user_id, k=10):
+    # Produtos comprados pelo usuário
+    bought_items = interactions.loc[
+        interactions['customer_id'] == user_id, 'product_id'
+    ].unique()
+
+    if len(bought_items) == 0:
+        return pd.Series(dtype=float)
+
+    # Score médio de similaridade
+    scores = shrunk_similarity.loc[bought_items].mean(axis=0)
+
+    # Remover itens já comprados
+    scores = scores.drop(bought_items, errors='ignore')
+
+    return scores.sort_values(ascending=False).head(k)
+```
+<br>
+
+##### Model testing
+```{python}
+test_user = interactions['customer_id'].iloc[0]
+recommend_item_item(test_user, k=5)
+```
+<br>
+
+##### Enrich recommendations with product information
+```{python}
+def recommend_with_metadata(user_id, k=10):
+    recs = recommend_item_item(user_id, k)
+    
+    return (
+        recs
+        .reset_index()
+        .merge(products, on='product_id', how='left')
+        .rename(columns={0: 'score'})
+    )
+
+recommend_with_metadata(test_user, k=5)
+```
+<br>
+
+The Item-Item Collaborative Filtering model identifies similar products based on real purchase patterns, enabling scalable and personalized recommendations. The application of shrinkage reduces noise caused by rare co-occurrences, making the system more reliable in high-sparsity scenarios typical of e-commerce.
+
+The score generated by the Item-Item CF represents a relative affinity measure between products, based exclusively on historical purchase patterns. It is used to rank recommended items and should not be interpreted as an absolute probability.
+
+---
+
+## Content-Based Filtering (TF-IDF)
+
+Despite the strength of behavioral signals, CF presents limitations:
+
+| Limitation            | Impact                             |
+| --------------------- | ---------------------------------- |
+| Product cold start    | New products are never recommended |
+| Historical dependency | Limited semantic explanation       |
+| High sparsity         | Some items rarely appear           |
+
+To mitigate these issues, Content-Based Filtering is used by representing products through their textual attributes.
+
+##### Product text preparation:
+```{python}
+products_cb = products.copy()
+
+products_cb['text'] = (
+    products_cb['name'].fillna('') + ' ' +
+    products_cb['category'].fillna('') + ' ' +
+    products_cb['brand'].fillna('')
+)
+
+products_cb[['product_id', 'text']].head()
+```
+<br>
+
+##### TF-IDF vectorization:
+```{python}
+tfidf = TfidfVectorizer(
+    ngram_range=(1,2),
+    min_df=2
+)
+
+tfidf_matrix = tfidf.fit_transform(products_cb['text'])
+
+tfidf_matrix.shape
+```
+<br>
+
+##### Product similarity (Cosine):
+```{python}
+content_similarity = cosine_similarity(tfidf_matrix)
+```
+<br>
+
+##### Build the Product × Product matrix:
+```{python}
+content_sim_df = pd.DataFrame(
+    content_similarity,
+    index=products_cb['product_id'],
+    columns=products_cb['product_id']
+)
+
+content_sim_df.iloc[:5, :5]
+```
+<br>
+
+##### Content-Based recommendation function:
+```{python}
+def recommend_content_based(user_id, k=10):
+    bought_items = interactions.loc[
+        interactions['customer_id'] == user_id, 'product_id'
+    ].unique()
+
+    if len(bought_items) == 0:
+        return pd.Series(dtype=float)
+
+    scores = content_sim_df.loc[bought_items].mean(axis=0)
+    scores = scores.drop(bought_items, errors='ignore')
+
+    return scores.sort_values(ascending=False).head(k)
+```
+<br>
+
+##### Content-Based model testing:
+```{python}
+test_user = interactions['customer_id'].iloc[0]
+recommend_content_based(test_user, k=5)
+```
+<br>
+
+##### Enrich recommendations with product information:
+```{python}
+def recommend_cb_with_metadata(user_id, k=10):
+    recs = recommend_content_based(user_id, k)
+    return (
+        recs
+        .reset_index()
+        .merge(products, on='product_id', how='left')
+        .rename(columns={0: 'score'})
+    )
+
+recommend_cb_with_metadata(test_user, k=5)
+```
+<br>
+
+The content-based model recommends semantically similar products, increasing system coverage and enabling recommendations even for items with limited historical data.
+
+---
+
+## Offline Evaluation — CF vs CB
+
+Before combining the models into a hybrid approach, Item-Item Collaborative Filtering (CF) and Content-Based Filtering (CB) were evaluated separately. This step is required to understand the individual contribution of each signal, identify their strengths and limitations, and prevent a dominant but noisy model from degrading overall performance.
+
+Isolated evaluation allows comparison using ranking metrics, informed tuning of hybrid model weights, and technical justification of the chosen architecture. In e-commerce scenarios, this practice ensures that the hybrid model delivers incremental gains over individual baselines rather than merely combining signals without measurable benefit.
+
+##### Create a Leave-Last-Out temporal split for evaluation:
+```{python}
+interactions_eval = transactions[['customer_id', 'product_id', 'transaction_date']].copy()
+
+# Garantir tipo datetime
+interactions_eval['transaction_date'] = pd.to_datetime(
+    interactions_eval['transaction_date']
+)
+
+# Ordenar temporalmente
+interactions_eval = interactions_eval.sort_values(
+    ['customer_id', 'transaction_date', 'product_id']
+)
+
+# Inicializar estruturas
+train_interactions = []
+test_interactions = {}
+
+# Holdout temporal (Last Item)
+for user_id, group in interactions_eval.groupby('customer_id'):
+    items = group['product_id'].tolist()
+
+    if len(items) < 2:
+        continue
+
+    test_item = items[-1]  # último item (mais recente)
+    test_interactions[user_id] = test_item
+
+    for item in items[:-1]:
+        train_interactions.append((user_id, item))
+
+train_df = pd.DataFrame(
+    train_interactions,
+    columns=['customer_id', 'product_id']
+)
+train_df['interaction'] = 1
+```
+<br>
+
+##### Rebuild the Item × User matrix for training:
+```{python}
+item_user_train = train_df.pivot_table(
+    index='product_id',
+    columns='customer_id',
+    values='interaction',
+    fill_value=0
+)
+```
+<br>
+
+#### Recompute CF on the training set:
+```{python}
+item_sim_train = cosine_similarity(item_user_train)
+item_sim_train_df = pd.DataFrame(
+    item_sim_train,
+    index=item_user_train.index,
+    columns=item_user_train.index
+)
+```
+<br>
+
+##### Recommendation function for evaluation (CF):
+```{python}
+def recommend_cf_eval(user_id, k=10):
+    bought_items = train_df.loc[
+        train_df['customer_id'] == user_id, 'product_id'
+    ].unique()
+
+    if len(bought_items) == 0:
+        return []
+
+    scores = item_sim_train_df.loc[bought_items].mean(axis=0)
+    scores = scores.drop(bought_items, errors='ignore')
+
+    return scores.sort_values(ascending=False).head(k).index.tolist()
+```
+<br>
+
+##### Recommendation function for evaluation (CB):
+```{python}
+def recommend_cb_eval(user_id, k=10):
+    bought_items = train_df.loc[
+        train_df['customer_id'] == user_id, 'product_id'
+    ].unique()
+
+    if len(bought_items) == 0:
+        return []
+
+    scores = content_sim_df.loc[bought_items].mean(axis=0)
+    scores = scores.drop(bought_items, errors='ignore')
+
+    return scores.sort_values(ascending=False).head(k).index.tolist()
+```
+<br>
+
+##### Evaluate Hit Rate @ K:
+```{python}
+def hit_rate(model_func, k=10):
+    hits = 0
+    total = 0
+
+    for user_id in sorted(test_interactions.keys()):
+        true_item = test_interactions[user_id]
+
+        recs = model_func(user_id, k)
+
+        if true_item in recs:
+            hits += 1
+
+        total += 1
+
+    return hits / total
+```
+<br>
+
+##### Results — CF vs CB:
+```{python}
+for k in [5, 10]:
+    hr_cf = hit_rate(recommend_cf_eval, k)
+    hr_cb = hit_rate(recommend_cb_eval, k)
+
+    print(f"Hit Rate @ {k}")
+    print(f"  Item-Item CF: {hr_cf:.4f}")
+    print(f"  Content-Based: {hr_cb:.4f}")
+    print("-" * 30)
+```
+<br>
+
+Before building the hybrid model, we evaluated the performance of Item-Item Collaborative Filtering and Content-Based Filtering separately using a Leave-Last-Out strategy and the Hit Rate@K metric.
+
+The results indicate that the collaborative model exhibits stronger predictive capability, reflecting the strength of behavioral signals in implicit feedback data. Although the Content-Based model shows lower standalone performance, it remains consistent and suitable for complementing the system, particularly in cold start scenarios and for improving coverage.
+
+*Conclusion:*
+CF achieves better standalone performance, while CB provides incremental value — justifying their combination.
+
+## Hybrid Model — Weight Tuning
+
+At this stage, we test different weight combinations between CF and CB to maximize performance.
+
+#### We test the following configurations::
+
+| w_cf | w_cb |
+| ---- | ---- |
+| 0.0  | 1.0  |
+| 0.2  | 0.8  |
+| 0.4  | 0.6  |
+| 0.6  | 0.4  |
+| 0.8  | 0.2  |
+| 1.0  | 0.0  |
+
+
+That includes:
+<br>
+
+* pure CB
+* pure CF
+* intermediate hybrid configurations
+
+##### Utility normalization function:
+```{python}
+def min_max_normalize(scores: pd.Series):
+    if scores.empty:
+        return scores
+    return (scores - scores.min()) / (scores.max() - scores.min() + 1e-9)
+```
+<br>
+
+##### Hybrid recommendation function:
+```{python}
+def recommend_hybrid_eval(
+    user_id,
+    k=10,
+    w_cf=0.6,
+    w_cb=0.4
+):
+
+    bought_items = train_df.loc[
+        train_df['customer_id'] == user_id, 'product_id'
+    ].unique()
+
+    if len(bought_items) == 0:
+        return pd.Series(dtype=float)
+
+    # CF
+    scores_cf = item_sim_train_df.loc[bought_items].mean(axis=0)
+    scores_cf = scores_cf.drop(bought_items, errors='ignore')
+    scores_cf = min_max_normalize(scores_cf)
+
+    # CB
+    scores_cb = content_sim_df.loc[bought_items].mean(axis=0)
+    scores_cb = scores_cb.drop(bought_items, errors='ignore')
+    scores_cb = min_max_normalize(scores_cb)
+
+    # Combinação
+    hybrid_scores = (
+        w_cf * scores_cf +
+        w_cb * scores_cb
+    ).dropna()
+
+    return hybrid_scores.sort_values(ascending=False).head(k)
+```
+<br>
+
+##### Hybrid evaluation function:
+```{python}
+def evaluate_hybrid(weights, k=10):
+    results = []
+
+    # Ordem fixa de usuários
+    users = sorted(test_interactions.keys())
+
+    for w_cf, w_cb in weights:
+        hits = []
+
+        for user in users:
+            true_item = test_interactions[user]
+
+            recs = recommend_hybrid_eval(
+                user_id=user,
+                k=k,
+                w_cf=w_cf,
+                w_cb=w_cb
+            )
+
+            hits.append(int(true_item in recs.index))
+
+        results.append({
+            'w_cf': w_cf,
+            'w_cb': w_cb,
+            f'hit_rate@{k}': np.mean(hits)
+        })
+
+    return pd.DataFrame(results)
+```
+<br>
+
+##### Run weight tuning:
+```{python}
+weight_grid = [
+    (0.0, 1.0),
+    (0.2, 0.8),
+    (0.4, 0.6),
+    (0.6, 0.4),
+    (0.8, 0.2),
+    (1.0, 0.0),
+]
+
+df_hybrid_eval = evaluate_hybrid(weight_grid, k=10)
+df_hybrid_eval.sort_values('hit_rate@10', ascending=False)
+```
+<br>
+
+The combination of collaborative and content-based models resulted in improved performance. The best result was obtained with weights w_cf=0.6 and w_cb=0.4, indicating that behavioral signals should be predominant while being complemented by semantic similarity.
+
+These results confirm that the hybrid model captures multiple dimensions of user behavior, reduces the individual limitations of the base models, and provides a more robust trade-off between precision and coverage.
+
+## Association Rules (Apriori)
+
+In addition to collaborative and content-based approaches, the system incorporates Association Rules to capture explicit co-occurrence patterns in shopping baskets. This technique enables the identification of products frequently purchased together and is particularly effective for cross-sell strategies and increasing average order value.
+
+Unlike user-centric models, association rules operate directly on transactions, making them robust to user cold start scenarios and highly interpretable for business stakeholders. When integrated into the hybrid model, these rules complement personalization with recommendations of complementary products.
+
+Simple analogy
+<br>
+
+* CF = suggest a similar shirt
+* CB = suggest a shirt from the same brand
+<br>
+Association Rules = suggest the belt that usually goes with the shirt
+
+In other words, answering the question: What is usually bought together?
+
+##### Build shopping baskets:
+```{python}
+# Garantir que a coluna 'transaction_date' seja do tipo datetime
+transactions['transaction_date'] = pd.to_datetime(transactions['transaction_date'])
+
+# Criar uma coluna de "order_id"
+transactions['order_id'] = (
+    transactions['customer_id'].astype(str) + '_' +
+    transactions['transaction_date'].dt.date.astype(str)
+)
+
+# Agrupar produtos por pedido
+basket = (
+    transactions
+    .groupby('order_id')['product_id']
+    .apply(list)
+)
+
+basket.head()
+```
+<br>
+
+##### One-hot encoding of baskets:
+```{python}
+te = TransactionEncoder()
+te_array = te.fit(basket).transform(basket)
+
+basket_df = pd.DataFrame(
+    te_array,
+    columns=te.columns_
+)
+
+basket_df.head()
+```
+<br>
+
+##### Loop by category:
+```{python}
+# Loop por categoria
+rules_all = []
+
+for category in products['category'].unique():
+
+    products_cat = products.loc[
+        products['category'] == category, 'product_id'
+    ].tolist()
+
+    basket_cat = basket.apply(
+        lambda items: [i for i in items if i in products_cat]
+    )
+
+    basket_cat = basket_cat[basket_cat.apply(len) >= 2]
+
+    if len(basket_cat) < 50:
+        continue
+
+    te = TransactionEncoder()
+    te_array = te.fit(basket_cat).transform(basket_cat)
+
+    basket_df_cat = pd.DataFrame(
+        te_array,
+        columns=te.columns_
+    )
+
+    frequent_itemsets = apriori(
+        basket_df_cat,
+        min_support=0.01,
+        use_colnames=True,
+        max_len=2
+    )
+
+    if frequent_itemsets.empty:
+        continue
+
+    rules = association_rules(
+        frequent_itemsets,
+        metric='lift',
+        min_threshold=1.0
+    )
+
+    if rules.empty:
+        continue
+
+    rules['category'] = category
+    rules_all.append(rules)
+```
+<br>
+
+##### Consolidate all rules:
+```{python}
+rules_df = pd.concat(rules_all, ignore_index=True)
+rules_df.sort_values('lift', ascending=False).head(10)
+```
+<br>
+
+##### Filter rules:
+```{python}
+rules_filtered = rules_df[
+    (rules_df['antecedents'].apply(len) == 1) &
+    (rules_df['consequents'].apply(len) == 1) &
+    (rules_df['confidence'] >= 0.2) &
+    (rules_df['lift'] >= 1.2)
+].sort_values('lift', ascending=False)
+
+rules_filtered.head(10)
+```
+<br>
+
+##### Recommendation function — Association Rules by category:
+```{python}
+def recommend_association_by_category(user_id, k=5):
+
+    bought_items = interactions.loc[
+        interactions['customer_id'] == user_id, 'product_id'
+    ].unique()
+
+    if len(bought_items) == 0:
+        return pd.Series(dtype=float)
+
+    recs = []
+
+    for item in bought_items:
+
+        item_category = products.loc[
+            products['product_id'] == item, 'category'
+        ].values[0]
+
+        matched_rules = rules_filtered[
+            (rules_filtered['category'] == item_category) &
+            (rules_filtered['antecedents'].apply(lambda x: item in x))
+        ]
+
+        for _, row in matched_rules.iterrows():
+            consequent = list(row['consequents'])[0]
+            recs.append((consequent, row['lift']))
+
+    if not recs:
+        return pd.Series(dtype=float)
+
+    recs_df = pd.DataFrame(recs, columns=['product_id', 'score'])
+
+    return (
+        recs_df
+        .groupby('product_id')['score']
+        .max()
+        .sort_values(ascending=False)
+        .head(k)
+    )
+```
+<br>
+
+##### Testing:
+```{python}
+user_items = interactions.loc[
+    interactions['customer_id'] == test_user, 'product_id'
+].unique()
+
+user_items
+```
+<br>
+
+Association rules were applied as a complementary cross-sell signal and are only used when the user’s purchase history intersects with the antecedents of the extracted rules.
+
+# Final Model
+
+The final model combines:
+
+| Component         | Role in the system               |
+| ----------------- | -------------------------------- |
+| Item-Item CF      | Behavior-based personalization   |
+| Content-Based     | Semantic similarity / cold start |
+| Association Rules | Contextual cross-sell (checkout) |
+
+<br>
+
+The hybrid model does not replace individual approaches — it combines signals.
+
+**Note:** Each model produces scores on different scales. Therefore, scores must be normalized before aggregation.
+
+##### Utility normalization function:
+```{python}
+def min_max_normalize(scores: pd.Series):
+    if scores.empty:
+        return scores
+    return (scores - scores.min()) / (scores.max() - scores.min() + 1e-9)
+```
+<br>
+
+##### Hybrid recommendation function:
+```{python}
+def recommend_hybrid(
+    user_id,
+    k=10,
+    w_cf=0.5,
+    w_cb=0.3,
+    w_ar=0.2
+):
+
+    scores_final = pd.Series(dtype=float)
+
+    # ---------- CF ----------
+    scores_cf = recommend_item_item(user_id, k=50)
+    scores_cf = min_max_normalize(scores_cf)
+
+    if not scores_cf.empty:
+        scores_final = scores_final.add(w_cf * scores_cf, fill_value=0)
+
+    # ---------- Content-Based ----------
+    scores_cb = recommend_content_based(user_id, k=50)
+    scores_cb = min_max_normalize(scores_cb)
+
+    if not scores_cb.empty:
+        scores_final = scores_final.add(w_cb * scores_cb, fill_value=0)
+
+    # ---------- Association Rules ----------
+    scores_ar = recommend_association_by_category(user_id, k=50)
+    scores_ar = min_max_normalize(scores_ar)
+
+    if not scores_ar.empty:
+        scores_final = scores_final.add(w_ar * scores_ar, fill_value=0)
+
+    # ---------- Remover itens já comprados ----------
+    bought_items = interactions.loc[
+        interactions['customer_id'] == user_id, 'product_id'
+    ].unique()
+
+    scores_final = scores_final.drop(bought_items, errors='ignore')
+
+    return scores_final.sort_values(ascending=False).head(k)
+```
+<br>
+
+##### Hybrid model testing:
+```{python}
+test_user = interactions['customer_id'].iloc[0]
+recommend_hybrid(test_user, k=10)
+```
+<br>
+
+##### Enrich recommendations with metadata:
+
+```{python}
+def recommend_hybrid_with_metadata(user_id, k=10):
+
+    recs = recommend_hybrid(user_id, k)
+
+    return (
+        recs
+        .reset_index()
+        .rename(columns={'index': 'product_id', 0: 'score'})
+        .merge(products, on='product_id', how='left')
+    )
+
+recommend_hybrid_with_metadata(test_user, k=10)
+```
+<br>
+
+The final system combines three complementary signals: Item-Item Collaborative Filtering, Content-Based Filtering, and Association Rules. Each component addresses a distinct aspect of the problem, ensuring personalization, coverage, and cross-sell capability. Scores are normalized and combined through a weighted sum, allowing fine-grained control over the impact of each signal.
+
+The model analyzes customer history, product similarity, and recurring co-purchase patterns to generate personalized and contextualized recommendations, balancing individual relevance with opportunities to increase average order value. In scenarios where no strong signal exists, the system avoids forcing artificial recommendations, preserving ranking quality.
+
+# Model Conclusion
+
+A hybrid recommender system was developed by combining behavioral (Item-Item Collaborative Filtering), semantic (Content-Based Filtering), and contextual (Association Rules) signals. The architecture ensures coverage, personalization, and cross-sell capability while respecting statistical data limitations and avoiding artificial recommendations. The model reflects real-world production practices and was incrementally evaluated, demonstrating qualitative gains in relevance and interpretability.
+
+# Cloud Deployment (AWS)
+
+This final stage transforms the developed model into a production-ready service, following offline training, versioned artifacts, and online inference via a serverless architecture.
+
+The deployment was organized into two main phases:
+
+## 1️. Offline Artifacts — Model Preparation for Production
+
+Before any interaction with cloud infrastructure, the recommender system is frozen into static artifacts, trained and validated offline.
+
+This approach follows a pattern widely adopted in real-world recommender systems:
+
+> *Training happens offline.
+> In production, the API only loads artifacts and executes ranking.*
+
+### What is saved as artifacts
+
+Files that represent the final state of the model, ensuring:
+
+* Reproducibility
+* Low computational cost in production
+* Low response latency
+* Clear separation between training and inference
+
+##### Save final artifacts of the built hybrid model:
+```{python}
+# -------------------------
+# Criar diretório de artefatos
+# -------------------------
+ARTIFACTS_DIR = "artifacts"
+os.makedirs(ARTIFACTS_DIR, exist_ok=True)
+
+# -------------------------
+# 1️⃣ CF — Similaridade Item-Item
+# -------------------------
+with open(f"{ARTIFACTS_DIR}/cf_similarity.pkl", "wb") as f:
+    pickle.dump(shrunk_similarity, f)
+
+# -------------------------
+# 2️⃣ Content-Based — Similaridade TF-IDF
+# -------------------------
+with open(f"{ARTIFACTS_DIR}/cb_similarity.pkl", "wb") as f:
+    pickle.dump(content_sim_df, f)
+
+# -------------------------
+# 3️⃣ Association Rules
+# -------------------------
+with open(f"{ARTIFACTS_DIR}/association_rules.pkl", "wb") as f:
+    pickle.dump(rules_filtered, f)
+
+# -------------------------
+# 4️⃣ Products (metadata)
+# -------------------------
+products.to_parquet(f"{ARTIFACTS_DIR}/products.parquet", index=False)
+
+# -------------------------
+# 5️⃣ Interactions (histórico mínimo)
+# -------------------------
+interactions.to_parquet(f"{ARTIFACTS_DIR}/interactions.parquet", index=False)
+
+# -------------------------
+# Versões para deploy
+# -------------------------
+products.to_csv(f"{ARTIFACTS_DIR}/products.csv", index=False)
+interactions.to_csv(f"{ARTIFACTS_DIR}/interactions.csv", index=False)
+```
+
+---
+
+## 2. AWS Deployment
+
+With the artifacts ready, the system is deployed using a serverless architecture on AWS, composed of three main services:
+
+* **Amazon S3** → artifact storage and versioning
+* **AWS Lambda** → on-demand inference execution
+* **Amazon API Gateway** → model exposure via a REST endpoint
+
+---
+
+### Amazon S3 — Model Artifact Storage
+
+In the first cloud deployment step, an S3 bucket is created to store all model artifacts.
+
+S3 acts as the model storage layer, decoupled from inference logic
+
+##### S3 bucket creation and artifact upload:
+
+{{< video AWS1-S3-bucket-creation.mp4 >}}
+
+---
+
+### AWS Lambda — Serving the Recommender
+
+With the artifacts available in S3, an AWS Lambda function is created with the responsibility to:
+
+* Load artifacts during initialization
+* Receive requests containing user_id
+* Execute hybrid ranking (CF + CB + Association Rules)
+* Return recommendations in JSON format
+
+This separation ensures that Lambda performs inference only, keeping cost and operational complexity under control.
+
+##### Lambda function creation and configuration:
+
+{{< video AWS2_FuncaoLambda.mp4 >}}
+
+##### Layer configuration:
+
+{{< video AWS3_Layer.mp4 >}}
+
+#### Function testing:
+
+{{< video AWS4-TesteFuncao.mp4 >}}
+
+### API Gateway — REST API Exposure
+
+To make the system externally accessible, the Lambda function is integrated with Amazon API Gateway.
+
+The result is a REST endpoint capable of returning personalized recommendations on demand, ready to be consumed by:
+
+* Web frontends
+* Mobile applications
+* Internal e-commerce systems
+
+##### API Gateway creation and Lambda integration:
+
+{{< video AWS5-API-Gateway.mp4 >}}
+
+---
+
+### Final Deployment and End-to-End Demonstration:
+
+After configuring S3, Lambda, and API Gateway, the system is deployed and tested end-to-end.
+
+##### UI demo bucket creation:
+
+{{< video AWS6-BucketUI-DEMO.mp4 >}}
+
+##### Demonstration — final deployment and recommendation API call:
+
+{{< video AWS7-FINAL-DMEO.mp4 >}}
+
+---
+
+This approach allows the model to evolve (retraining, new weights, new signals) without impacting the API, simply by replacing artifacts stored in S3.
+
+---
+
+# Project Conclusion
+
+This project demonstrates the construction of a hybrid recommender system that is interpretable and production-oriented, combining technical rigor with direct business impact.
+
+The hybrid approach balances personalization, coverage, and cross-sell opportunities, reflecting real-world practices adopted by large-scale e-commerce platforms.
+
+---
+
+## References
+
+This project was also inspired by the following published articles and resources on recommender systems:
+
+**Design and Implementation of a Product Recommendation System with Association and Clustering Algorithms**
+[https://medium.com/data-science/mastering-customer-segmentation-using-credit-card-transaction-data-dc39a8465766](https://medium.com/data-science/mastering-customer-segmentation-using-credit-card-transaction-data-dc39a8465766)
+
+**Mastering Customer Segmentation using Credit Card Transaction Data**
+[https://www.sciencedirect.com/science/article/pii/S1877050923003289](https://www.sciencedirect.com/science/article/pii/S1877050923003289)
+
+**E-Commerce Product Recommendation System based on ML Algorithms**
+[https://arxiv.org/abs/2407.21026](https://arxiv.org/abs/2407.21026)
+
+**Mastering E-commerce Product Recommendations in Python**
+[https://medium.com/datafabrica/mastering-e-commerce-product-recommendations-in-python-7c12a4bf0c2c](https://medium.com/datafabrica/mastering-e-commerce-product-recommendations-in-python-7c12a4bf0c2c)
+
+## GitHub Repository
+
+Access all code, datasets, notebooks, and files for this project:
+
+[Click here to access](https://github.com/FerreiraGabrielw/ds-recomendation-system-deploy){target="_blank" rel="noopener noreferrer"}
+
+---
