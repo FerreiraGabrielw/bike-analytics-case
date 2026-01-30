@@ -1,0 +1,455 @@
+---
+title: "Case Tembici - Gabriel Ferreira"
+author: "Gabriel Ferreira"
+date: "01/30/2026"
+format:
+  html:
+    page-layout: full
+    code-fold: true
+    code-summary: "Show Code"
+    toc: true
+    toc-depth: 3
+    toc-title: "Índice do Projeto"
+    anchor-sections: false
+engine: knitr
+jupyter: ir
+---
+
+<style>
+.card {
+  padding: 1.2rem 1rem;
+  border-radius: 12px;
+  background-color: #f8f9fa;
+  border: 1px solid #e1e5ea;
+  text-align: center;
+}
+
+.kpi-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #6c757d;
+  display: block;
+  margin-bottom: 0.4rem;
+}
+
+.kpi-value {
+  font-size: 2.2rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #212529;
+  white-space: nowrap;
+  display: inline-block;
+}
+</style>
+
+
+## Contexto
+
+Este projeto teve início a partir da necessidade de consolidar múltiplas fontes de dados relacionadas à operação de um sistema de bicicletas compartilhadas, com o objetivo de criar uma base única e escalável para análises recorrentes.
+
+As fontes de dados contemplam informações sobre:
+
+- Viagens realizadas
+- Clientes e assinaturas
+- Faturas e cobranças
+- Erros operacionais (unlock)
+
+O objetivo principal foi estruturar um pipeline analítico completo, desde a ingestão dos dados brutos até a disponibilização de  indicadores estratégicos de utilização, desempenho financeiro e qualidade operacional.
+
+
+
+## Arquitetura de Dados e Pipeline Analítico
+
+O pipeline de dados foi estruturado seguindo a arquitetura Medallion (Bronze, Silver e Gold), permitindo a separação entre ingestão, tratamento e consumo dos dados.
+
+Essa abordagem permite:
+- Manutenção do pipeline
+- Escalabilidade
+- Auditoria e reprocessamento
+- Evolução do modelo analítico
+
+A figura abaixo apresenta o modelo lógico da camada analítica (Gold), destacando as entidades principais, suas chaves e os relacionamentos utilizados para consolidar a base final de análise.
+
+![Modelo lógico da camada Gold](SQL_schema.png)
+
+A tabela `viagens` atua como a tabela fato central do modelo, contendo
+uma linha por viagem como unidade principal de análise.
+
+As tabelas auxiliares foram integradas da seguinte forma:
+
+- `customers_resumo`: adiciona informações consolidadas de clientes e assinaturas,
+  evitando duplicações e preservando histórico relevante;
+- `faturas_agregadas`: garante consistência financeira ao consolidar múltiplas linhas
+  de cobrança em uma única fatura;
+- `unlock_erros_agregados`: fornece métricas operacionais relacionadas à qualidade
+  do serviço, agregadas por usuário e data.
+
+
+
+### Camada Bronze: Ingestão dos Dados Brutos
+
+A camada Bronze representa a etapa de ingestão dos dados brutos fornecidos no desafio. Os arquivos foram carregados no Google BigQuery preservando sua estrutura original, sem aplicação de regras de negócio ou transformações complexas. Eventuais inconsistências de tipagem, valores ausentes e formatação foram mantidas intencionalmente, garantindo que o tratamento ocorresse de forma controlada nas camadas posteriores.
+
+![Estrutura Camada Bronze no BigQuery](bronze_layer.png)
+
+### Camada Silver: Padronização e Tratamento dos Dados
+
+Nesta camada, os dados foram padronizados com foco em:
+
+- Correção de tipos
+- Normalização de identificadores
+- Conversão de datas e timestamps
+- Garantia da granularidade original
+
+![Estrutura Camada Silver no BigQuery](silver_layer.png)
+
+##### Tabela de Viagens
+
+<details>
+<summary><strong>Mostar código SQL</strong></summary>
+
+```sql
+-- Tabela de viagens
+CREATE TABLE silver.viagens AS
+SELECT
+  CAST(trip AS STRING) AS trip_id,
+  CAST(customer AS STRING) AS customer_id,
+  project,
+  TIMESTAMP(start_time) AS start_time,
+  TIMESTAMP(end_time) AS end_time,
+  CAST(duration_seconds AS INT64) AS duration_seconds,
+  CAST(invoice_id AS INT64) AS invoice_id
+FROM bronze.viagens
+WHERE trip IS NOT NULL;
+```
+</details>
+
+Padroniza a tabela de viagens, garantindo tipos corretos para identificadores e timestamps. A granularidade de uma linha por viagem é preservada, e registros inválidos são descartados.
+
+##### Tabela de Customers:
+
+<details>
+<summary><strong>Mostar código SQL</strong></summary>
+
+```sql
+-- Tabela de Customers
+CREATE TABLE silver.customers AS
+SELECT
+  CAST(customer AS STRING) AS customer_id,
+  CAST(user_id AS STRING) AS user_id,
+  project,
+  DATE(subscription_start_date) AS subscription_start_date,
+  DATE(subscription_end_date) AS subscription_end_date,
+  plan_type,
+  plan_periodicity,
+  is_customer_first_purchase AS is_first_purchase,
+  SAFE_CAST(is_customer_returning AS BOOL) AS is_customer_returning,
+  CAST(plan_cost AS NUMERIC) AS plan_cost,
+  DATE(date_joined) AS date_joined
+FROM bronze.customers;
+```
+</details>
+
+Realiza a padronização dos dados de clientes e assinaturas, tratando inconsistências de tipagem (especialmente identificadores) e convertendo datas e valores monetários para formatos adequados.
+
+##### Tabela de Faturas
+
+<details>
+<summary><strong>Mostar código SQL</strong></summary>
+
+```sql
+-- Tabela de Faturas
+CREATE TABLE silver.faturas AS
+SELECT
+  CAST(invoice_id AS INT64) AS invoice_id,
+  CAST(invoice_line_id AS INT64) AS invoice_line_id,
+  project,
+  invoice_status,
+  CAST(usage_fee AS NUMERIC) AS usage_fee
+FROM bronze.faturas;
+```
+</details>
+
+Padroniza os dados financeiros, mantendo a granularidade de linha de cobrança e preparando os valores para agregações financeiras na camada analítica.
+
+##### Tabela de Unlock Erros
+
+<details>
+<summary><strong>Mostar código SQL</strong></summary>
+
+```sql
+-- Tabela de Unlock Erros
+CREATE TABLE silver.unlock_erros AS
+SELECT
+  CAST(user_id AS STRING) AS user_id,
+  project,
+  TIMESTAMP(event_timestamp) AS event_timestamp,
+  event_name,
+  error_type
+FROM bronze.unlock_erros;
+```
+</details>
+
+Trata os registros de eventos de erro do aplicativo, convertendo timestamps e normalizando identificadores para permitir agregações operacionais posteriores.
+
+
+
+### Camada Gold: Modelagem Analítica
+
+A camada Gold concentra as agregações e a modelagem voltada para consumo analítico,
+respeitando a granularidade adequada de cada entidade.
+
+![Estrutura Camada Gold no BigQuery](gold_layer.png)
+
+##### Clientes (resumo):
+
+<details>
+<summary><strong>Mostar código SQL</strong></summary>
+
+```sql
+CREATE TABLE gold.customers_resumo AS
+SELECT
+  customer_id,
+  ANY_VALUE(user_id) AS user_id,
+  MIN(subscription_start_date) AS first_subscription_date,
+  MAX(subscription_end_date) AS last_subscription_date,
+  ANY_VALUE(plan_type) AS plan_type,
+  ANY_VALUE(plan_periodicity) AS plan_periodicity,
+  COUNT(*) AS qtd_planos,
+  MAX(plan_cost) AS max_plan_cost,
+  MAX(is_first_purchase) AS is_first_purchase
+FROM silver.customers
+GROUP BY customer_id;
+```
+</details>
+
+Consolida o histórico de assinaturas em uma visão resumida por cliente, evitando duplicações e facilitando análises de perfil e comportamento.
+
+##### Faturas Agregadas:
+
+<details>
+<summary><strong>Mostar código SQL</strong></summary>
+
+```sql
+CREATE TABLE gold.faturas_agregadas AS
+SELECT
+  invoice_id,
+  COUNT(invoice_line_id) AS qtd_itens_fatura,
+  SUM(usage_fee) AS valor_total_fatura,
+  ANY_VALUE(invoice_status) AS invoice_status
+FROM silver.faturas
+GROUP BY invoice_id;
+```
+</details>
+
+Agrega os dados financeiros no nível de fatura, garantindo consistência no cálculo de receitas e evitando duplicações em análises financeiras.
+
+##### Unlock Erros Agregados:
+
+<details>
+<summary><strong>Mostar código SQL</strong></summary>
+
+```sql
+CREATE TABLE gold.unlock_erros_agregados AS
+SELECT
+  user_id,
+  DATE(event_timestamp) AS event_date,
+  COUNT(*) AS qtd_erros_unlock
+FROM silver.unlock_erros
+GROUP BY user_id, event_date;
+```
+</details>
+
+Resume os eventos de erro por usuário e data, criando um indicador operacional que permite monitorar a qualidade do serviço ao longo do tempo.
+
+##### Viagens Consolidadas (Base Final):
+
+<details>
+<summary><strong>Mostar código SQL</strong></summary>
+
+```sql
+CREATE TABLE gold.viagens_consolidadas AS
+SELECT
+  v.trip_id,
+  v.project,
+  v.customer_id,
+  c.user_id,
+
+  v.start_time,
+  v.end_time,
+  v.duration_seconds,
+
+  v.invoice_id,
+
+  -- FINANCEIRO
+  f.valor_total_fatura,
+  f.qtd_itens_fatura,
+  f.invoice_status,
+
+  -- OPERACIONAL
+  IFNULL(e.qtd_erros_unlock, 0) AS qtd_erros_unlock,
+
+  -- PERFIL DO CLIENTE
+  c.plan_type,
+  c.plan_periodicity,
+  c.qtd_planos,
+  c.max_plan_cost,
+  c.is_first_purchase
+
+FROM silver.viagens v
+
+LEFT JOIN gold.customers_resumo c
+  ON v.customer_id = c.customer_id
+
+LEFT JOIN gold.faturas_agregadas f
+  ON v.invoice_id = f.invoice_id
+
+LEFT JOIN gold.unlock_erros_agregados e
+  ON c.user_id = e.user_id
+ AND DATE(v.start_time) = e.event_date;
+
+```
+</details>
+
+Cria a base analítica final, com uma linha por viagem, integrando dados operacionais, financeiros e de clientes.
+
+
+## Disponibilização para Análise
+
+A base consolidada foi exportada a partir do BigQuery e utilizada como fonte para as análises exploratórias e visualizações desenvolvidas em R, apresentadas a seguir.
+
+
+## Setup e Bibliotecas
+
+```{r}
+#| message: false
+#| warning: false
+
+library(tidyverse)
+library(lubridate)
+library(scales)
+library(ggplot2)
+library(DT)
+
+fmt_brl <- function(x) {
+  paste0(
+    "R$ ",
+    formatC(
+      x,
+      format = "f",
+      big.mark = ".",
+      decimal.mark = ",",
+      digits = 2
+    )
+  )
+}
+```
+
+
+## Carga e Tratamento dos Dados
+
+O dataset já contém registros consolidados de viagens, incluindo horários, faturamento, tipo de plano e indicadores de erro operacional.
+
+```{r}
+df <- read_csv(
+  "viagens_consolidadas.csv",
+  show_col_types = FALSE
+)
+```
+
+Nesta etapa, realizamos:
+
+* Conversão de colunas de data e hora
+* Padronização de métricas de duração
+* Criação de variáveis analíticas
+
+```{r}
+df <- df %>%
+  mutate(
+    start_time   = ymd_hms(start_time),
+    end_time     = ymd_hms(end_time),
+    date         = as_date(start_time),
+    duration_min = duration_seconds / 60,
+    receita      = as.numeric(valor_total_fatura),
+    erro         = qtd_erros_unlock > 0
+  )
+```
+
+
+### Engenharia de Features
+
+As seguintes variáveis derivadas foram criadas para enriquecer a análise:
+
+* **Duração da viagem (minutos)**
+* **Data da viagem** para agregações temporais
+* **Receita padronizada**
+* **Indicador de erro operacional**
+
+Essas features são fundamentais para análises temporais e cálculo de indicadores de desempenho.
+
+
+## Indicadores-Chave (KPIs)
+
+Com base nos objetivos do negócio, foram definidos os seguintes KPIs:
+
+```{r}
+total_viagens   <- nrow(df)
+usuarios_ativos <- n_distinct(df$user_id, na.rm = TRUE)
+duracao_mediana <- median(df$duration_min, na.rm = TRUE)
+receita_total   <- sum(df$receita, na.rm = TRUE)
+receita_media   <- mean(df$receita, na.rm = TRUE)
+taxa_erro       <- mean(df$erro, na.rm = TRUE)
+```
+
+
+### KPIs
+
+::: {.grid .gap-4}
+
+::: {.g-col-4 .card}
+<span class="kpi-label">Total de Viagens</span>
+<span class="kpi-value">`r comma(total_viagens)`</span>
+:::
+
+::: {.g-col-4 .card}
+<span class="kpi-label">Usuários Ativos</span>
+<span class="kpi-value">`r comma(usuarios_ativos)`</span>
+:::
+
+::: {.g-col-4 .card}
+<span class="kpi-label">Duração Típica da Viagem (mediana)</span>
+<span class="kpi-value">`r round(duracao_mediana, 1)`</span>
+:::
+
+::: {.g-col-4 .card}
+<span class="kpi-label">Receita Total</span>
+<span class="kpi-value">`r fmt_brl(receita_total)`</span>
+:::
+
+::: {.g-col-4 .card}
+<span class="kpi-label">Receita Média por Viagem</span>
+<span class="kpi-value">`r fmt_brl(receita_media)`</span>
+:::
+
+::: {.g-col-4 .card}
+<span class="kpi-label">Taxa de Erro Operacional</span>
+<span class="kpi-value">`r percent(taxa_erro, accuracy = 0.1)`</span>
+:::
+
+:::
+
+Os indicadores oferecem uma visão rápida e estratégica do desempenho operacional da plataforma.
+
+
+## Conclusão e Próximos Passos
+
+A base analisada representa um snapshot operacional de um único dia. Dessa forma, análises temporais tradicionais (diária, semanal ou mensal) não seriam estatisticamente representativas neste contexto.
+
+Por esse motivo, a análise foi concentrada em indicadores agregados (KPIs), que oferecem uma visão clara e objetiva da utilização do sistema, desempenho financeiro e qualidade operacional no período analisado.
+
+### Próximos Passos Sugeridos
+
+* Segmentação de usuários e planos, para identificar perfis de maior valor e padrões distintos de uso.
+* Modelagem preditiva de demanda, visando otimização de frota e planejamento operacional.
+* Análise de churn e retenção, especialmente em usuários afetados por falhas operacionais.
+* Monitoramento de erros, com criação de alertas para redução de impacto na experiência do usuário.

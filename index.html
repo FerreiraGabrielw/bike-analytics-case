@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.8.27">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Gabriel Ferreira">
+<meta name="dcterms.date" content="2026-01-30">
+
+<title>Case Tembici - Gabriel Ferreira</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="index_files/libs/clipboard/clipboard.min.js"></script>
+<script src="index_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="index_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="index_files/libs/quarto-html/axe/axe-check.js" type="module"></script>
+<script src="index_files/libs/quarto-html/popper.min.js"></script>
+<script src="index_files/libs/quarto-html/tippy.umd.min.js"></script>
+<link href="index_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="index_files/libs/quarto-html/quarto-syntax-highlighting-ed96de9b727972fe78a7b5d16c58bf87.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="index_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="index_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="index_files/libs/bootstrap/bootstrap-9e3ffae467580fdb927a41352e75a2e0.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+
+
+</head>
+
+<body class="quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-full">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+  <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Índice do Projeto</h2>
+   
+  <ul>
+  <li><a href="#contexto" id="toc-contexto" class="nav-link active" data-scroll-target="#contexto">Contexto</a></li>
+  <li><a href="#arquitetura-de-dados-e-pipeline-analítico" id="toc-arquitetura-de-dados-e-pipeline-analítico" class="nav-link" data-scroll-target="#arquitetura-de-dados-e-pipeline-analítico">Arquitetura de Dados e Pipeline Analítico</a>
+  <ul class="collapse">
+  <li><a href="#camada-bronze-ingestão-dos-dados-brutos" id="toc-camada-bronze-ingestão-dos-dados-brutos" class="nav-link" data-scroll-target="#camada-bronze-ingestão-dos-dados-brutos">Camada Bronze: Ingestão dos Dados Brutos</a></li>
+  <li><a href="#camada-silver-padronização-e-tratamento-dos-dados" id="toc-camada-silver-padronização-e-tratamento-dos-dados" class="nav-link" data-scroll-target="#camada-silver-padronização-e-tratamento-dos-dados">Camada Silver: Padronização e Tratamento dos Dados</a></li>
+  <li><a href="#camada-gold-modelagem-analítica" id="toc-camada-gold-modelagem-analítica" class="nav-link" data-scroll-target="#camada-gold-modelagem-analítica">Camada Gold: Modelagem Analítica</a></li>
+  </ul></li>
+  <li><a href="#disponibilização-para-análise" id="toc-disponibilização-para-análise" class="nav-link" data-scroll-target="#disponibilização-para-análise">Disponibilização para Análise</a></li>
+  <li><a href="#setup-e-bibliotecas" id="toc-setup-e-bibliotecas" class="nav-link" data-scroll-target="#setup-e-bibliotecas">Setup e Bibliotecas</a></li>
+  <li><a href="#carga-e-tratamento-dos-dados" id="toc-carga-e-tratamento-dos-dados" class="nav-link" data-scroll-target="#carga-e-tratamento-dos-dados">Carga e Tratamento dos Dados</a>
+  <ul class="collapse">
+  <li><a href="#engenharia-de-features" id="toc-engenharia-de-features" class="nav-link" data-scroll-target="#engenharia-de-features">Engenharia de Features</a></li>
+  </ul></li>
+  <li><a href="#indicadores-chave-kpis" id="toc-indicadores-chave-kpis" class="nav-link" data-scroll-target="#indicadores-chave-kpis">Indicadores-Chave (KPIs)</a>
+  <ul class="collapse">
+  <li><a href="#kpis" id="toc-kpis" class="nav-link" data-scroll-target="#kpis">KPIs</a></li>
+  </ul></li>
+  <li><a href="#conclusão-e-próximos-passos" id="toc-conclusão-e-próximos-passos" class="nav-link" data-scroll-target="#conclusão-e-próximos-passos">Conclusão e Próximos Passos</a>
+  <ul class="collapse">
+  <li><a href="#próximos-passos-sugeridos" id="toc-próximos-passos-sugeridos" class="nav-link" data-scroll-target="#próximos-passos-sugeridos">Próximos Passos Sugeridos</a></li>
+  </ul></li>
+  </ul>
+</nav>
+</div>
+<main class="content column-page-left" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Case Tembici - Gabriel Ferreira</h1>
+</div>
+
+
+
+<div class="quarto-title-meta column-page-left">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Gabriel Ferreira </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">January 30, 2026</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<style>
+.card {
+  padding: 1.2rem 1rem;
+  border-radius: 12px;
+  background-color: #f8f9fa;
+  border: 1px solid #e1e5ea;
+  text-align: center;
+}
+
+.kpi-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #6c757d;
+  display: block;
+  margin-bottom: 0.4rem;
+}
+
+.kpi-value {
+  font-size: 2.2rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #212529;
+  white-space: nowrap;
+  display: inline-block;
+}
+</style>
+<section id="contexto" class="level2">
+<h2 data-anchor-id="contexto">Contexto</h2>
+<p>Este projeto teve início a partir da necessidade de consolidar múltiplas fontes de dados relacionadas à operação de um sistema de bicicletas compartilhadas, com o objetivo de criar uma base única e escalável para análises recorrentes.</p>
+<p>As fontes de dados contemplam informações sobre:</p>
+<ul>
+<li>Viagens realizadas</li>
+<li>Clientes e assinaturas</li>
+<li>Faturas e cobranças</li>
+<li>Erros operacionais (unlock)</li>
+</ul>
+<p>O objetivo principal foi estruturar um pipeline analítico completo, desde a ingestão dos dados brutos até a disponibilização de indicadores estratégicos de utilização, desempenho financeiro e qualidade operacional.</p>
+</section>
+<section id="arquitetura-de-dados-e-pipeline-analítico" class="level2">
+<h2 data-anchor-id="arquitetura-de-dados-e-pipeline-analítico">Arquitetura de Dados e Pipeline Analítico</h2>
+<p>O pipeline de dados foi estruturado seguindo a arquitetura Medallion (Bronze, Silver e Gold), permitindo a separação entre ingestão, tratamento e consumo dos dados.</p>
+<p>Essa abordagem permite: - Manutenção do pipeline - Escalabilidade - Auditoria e reprocessamento - Evolução do modelo analítico</p>
+<p>A figura abaixo apresenta o modelo lógico da camada analítica (Gold), destacando as entidades principais, suas chaves e os relacionamentos utilizados para consolidar a base final de análise.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="SQL_schema.png" class="img-fluid figure-img"></p>
+<figcaption>Modelo lógico da camada Gold</figcaption>
+</figure>
+</div>
+<p>A tabela <code>viagens</code> atua como a tabela fato central do modelo, contendo uma linha por viagem como unidade principal de análise.</p>
+<p>As tabelas auxiliares foram integradas da seguinte forma:</p>
+<ul>
+<li><code>customers_resumo</code>: adiciona informações consolidadas de clientes e assinaturas, evitando duplicações e preservando histórico relevante;</li>
+<li><code>faturas_agregadas</code>: garante consistência financeira ao consolidar múltiplas linhas de cobrança em uma única fatura;</li>
+<li><code>unlock_erros_agregados</code>: fornece métricas operacionais relacionadas à qualidade do serviço, agregadas por usuário e data.</li>
+</ul>
+<section id="camada-bronze-ingestão-dos-dados-brutos" class="level3">
+<h3 data-anchor-id="camada-bronze-ingestão-dos-dados-brutos">Camada Bronze: Ingestão dos Dados Brutos</h3>
+<p>A camada Bronze representa a etapa de ingestão dos dados brutos fornecidos no desafio. Os arquivos foram carregados no Google BigQuery preservando sua estrutura original, sem aplicação de regras de negócio ou transformações complexas. Eventuais inconsistências de tipagem, valores ausentes e formatação foram mantidas intencionalmente, garantindo que o tratamento ocorresse de forma controlada nas camadas posteriores.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="bronze_layer.png" class="img-fluid figure-img"></p>
+<figcaption>Estrutura Camada Bronze no BigQuery</figcaption>
+</figure>
+</div>
+</section>
+<section id="camada-silver-padronização-e-tratamento-dos-dados" class="level3">
+<h3 data-anchor-id="camada-silver-padronização-e-tratamento-dos-dados">Camada Silver: Padronização e Tratamento dos Dados</h3>
+<p>Nesta camada, os dados foram padronizados com foco em:</p>
+<ul>
+<li>Correção de tipos</li>
+<li>Normalização de identificadores</li>
+<li>Conversão de datas e timestamps</li>
+<li>Garantia da granularidade original</li>
+</ul>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="silver_layer.png" class="img-fluid figure-img"></p>
+<figcaption>Estrutura Camada Silver no BigQuery</figcaption>
+</figure>
+</div>
+<section id="tabela-de-viagens" class="level5">
+<h5 data-anchor-id="tabela-de-viagens">Tabela de Viagens</h5>
+<details>
+<summary>
+<strong>Mostar código SQL</strong>
+</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode sql code-with-copy"><code class="sourceCode sql"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">-- Tabela de viagens</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">CREATE</span> <span class="kw">TABLE</span> silver.viagens <span class="kw">AS</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">CAST</span>(trip <span class="kw">AS</span> STRING) <span class="kw">AS</span> trip_id,</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">CAST</span>(customer <span class="kw">AS</span> STRING) <span class="kw">AS</span> customer_id,</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>  project,</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>  <span class="dt">TIMESTAMP</span>(start_time) <span class="kw">AS</span> start_time,</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>  <span class="dt">TIMESTAMP</span>(end_time) <span class="kw">AS</span> end_time,</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">CAST</span>(duration_seconds <span class="kw">AS</span> INT64) <span class="kw">AS</span> duration_seconds,</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">CAST</span>(invoice_id <span class="kw">AS</span> INT64) <span class="kw">AS</span> invoice_id</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="kw">FROM</span> bronze.viagens</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="kw">WHERE</span> trip <span class="kw">IS</span> <span class="kw">NOT</span> <span class="kw">NULL</span>;</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<p>Padroniza a tabela de viagens, garantindo tipos corretos para identificadores e timestamps. A granularidade de uma linha por viagem é preservada, e registros inválidos são descartados.</p>
+</section>
+<section id="tabela-de-customers" class="level5">
+<h5 data-anchor-id="tabela-de-customers">Tabela de Customers:</h5>
+<details>
+<summary>
+<strong>Mostar código SQL</strong>
+</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb2"><pre class="sourceCode sql code-with-copy"><code class="sourceCode sql"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">-- Tabela de Customers</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="kw">CREATE</span> <span class="kw">TABLE</span> silver.customers <span class="kw">AS</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">CAST</span>(customer <span class="kw">AS</span> STRING) <span class="kw">AS</span> customer_id,</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">CAST</span>(user_id <span class="kw">AS</span> STRING) <span class="kw">AS</span> user_id,</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>  project,</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>  <span class="dt">DATE</span>(subscription_start_date) <span class="kw">AS</span> subscription_start_date,</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>  <span class="dt">DATE</span>(subscription_end_date) <span class="kw">AS</span> subscription_end_date,</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>  plan_type,</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>  plan_periodicity,</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>  is_customer_first_purchase <span class="kw">AS</span> is_first_purchase,</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>  SAFE_CAST(is_customer_returning <span class="kw">AS</span> BOOL) <span class="kw">AS</span> is_customer_returning,</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">CAST</span>(plan_cost <span class="kw">AS</span> <span class="dt">NUMERIC</span>) <span class="kw">AS</span> plan_cost,</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>  <span class="dt">DATE</span>(date_joined) <span class="kw">AS</span> date_joined</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a><span class="kw">FROM</span> bronze.customers;</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<p>Realiza a padronização dos dados de clientes e assinaturas, tratando inconsistências de tipagem (especialmente identificadores) e convertendo datas e valores monetários para formatos adequados.</p>
+</section>
+<section id="tabela-de-faturas" class="level5">
+<h5 data-anchor-id="tabela-de-faturas">Tabela de Faturas</h5>
+<details>
+<summary>
+<strong>Mostar código SQL</strong>
+</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3"><pre class="sourceCode sql code-with-copy"><code class="sourceCode sql"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co">-- Tabela de Faturas</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="kw">CREATE</span> <span class="kw">TABLE</span> silver.faturas <span class="kw">AS</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">CAST</span>(invoice_id <span class="kw">AS</span> INT64) <span class="kw">AS</span> invoice_id,</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">CAST</span>(invoice_line_id <span class="kw">AS</span> INT64) <span class="kw">AS</span> invoice_line_id,</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>  project,</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>  invoice_status,</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">CAST</span>(usage_fee <span class="kw">AS</span> <span class="dt">NUMERIC</span>) <span class="kw">AS</span> usage_fee</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="kw">FROM</span> bronze.faturas;</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<p>Padroniza os dados financeiros, mantendo a granularidade de linha de cobrança e preparando os valores para agregações financeiras na camada analítica.</p>
+</section>
+<section id="tabela-de-unlock-erros" class="level5">
+<h5 data-anchor-id="tabela-de-unlock-erros">Tabela de Unlock Erros</h5>
+<details>
+<summary>
+<strong>Mostar código SQL</strong>
+</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode sql code-with-copy"><code class="sourceCode sql"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co">-- Tabela de Unlock Erros</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="kw">CREATE</span> <span class="kw">TABLE</span> silver.unlock_erros <span class="kw">AS</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">CAST</span>(user_id <span class="kw">AS</span> STRING) <span class="kw">AS</span> user_id,</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>  project,</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>  <span class="dt">TIMESTAMP</span>(event_timestamp) <span class="kw">AS</span> event_timestamp,</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>  event_name,</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>  error_type</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="kw">FROM</span> bronze.unlock_erros;</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<p>Trata os registros de eventos de erro do aplicativo, convertendo timestamps e normalizando identificadores para permitir agregações operacionais posteriores.</p>
+</section>
+</section>
+<section id="camada-gold-modelagem-analítica" class="level3">
+<h3 data-anchor-id="camada-gold-modelagem-analítica">Camada Gold: Modelagem Analítica</h3>
+<p>A camada Gold concentra as agregações e a modelagem voltada para consumo analítico, respeitando a granularidade adequada de cada entidade.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="gold_layer.png" class="img-fluid figure-img"></p>
+<figcaption>Estrutura Camada Gold no BigQuery</figcaption>
+</figure>
+</div>
+<section id="clientes-resumo" class="level5">
+<h5 data-anchor-id="clientes-resumo">Clientes (resumo):</h5>
+<details>
+<summary>
+<strong>Mostar código SQL</strong>
+</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5"><pre class="sourceCode sql code-with-copy"><code class="sourceCode sql"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">CREATE</span> <span class="kw">TABLE</span> gold.customers_resumo <span class="kw">AS</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>  customer_id,</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>  ANY_VALUE(user_id) <span class="kw">AS</span> user_id,</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">MIN</span>(subscription_start_date) <span class="kw">AS</span> first_subscription_date,</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">MAX</span>(subscription_end_date) <span class="kw">AS</span> last_subscription_date,</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>  ANY_VALUE(plan_type) <span class="kw">AS</span> plan_type,</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>  ANY_VALUE(plan_periodicity) <span class="kw">AS</span> plan_periodicity,</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">COUNT</span>(<span class="op">*</span>) <span class="kw">AS</span> qtd_planos,</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">MAX</span>(plan_cost) <span class="kw">AS</span> max_plan_cost,</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">MAX</span>(is_first_purchase) <span class="kw">AS</span> is_first_purchase</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a><span class="kw">FROM</span> silver.customers</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a><span class="kw">GROUP</span> <span class="kw">BY</span> customer_id;</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<p>Consolida o histórico de assinaturas em uma visão resumida por cliente, evitando duplicações e facilitando análises de perfil e comportamento.</p>
+</section>
+<section id="faturas-agregadas" class="level5">
+<h5 data-anchor-id="faturas-agregadas">Faturas Agregadas:</h5>
+<details>
+<summary>
+<strong>Mostar código SQL</strong>
+</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb6"><pre class="sourceCode sql code-with-copy"><code class="sourceCode sql"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">CREATE</span> <span class="kw">TABLE</span> gold.faturas_agregadas <span class="kw">AS</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>  invoice_id,</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">COUNT</span>(invoice_line_id) <span class="kw">AS</span> qtd_itens_fatura,</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">SUM</span>(usage_fee) <span class="kw">AS</span> valor_total_fatura,</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>  ANY_VALUE(invoice_status) <span class="kw">AS</span> invoice_status</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a><span class="kw">FROM</span> silver.faturas</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="kw">GROUP</span> <span class="kw">BY</span> invoice_id;</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<p>Agrega os dados financeiros no nível de fatura, garantindo consistência no cálculo de receitas e evitando duplicações em análises financeiras.</p>
+</section>
+<section id="unlock-erros-agregados" class="level5">
+<h5 data-anchor-id="unlock-erros-agregados">Unlock Erros Agregados:</h5>
+<details>
+<summary>
+<strong>Mostar código SQL</strong>
+</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb7"><pre class="sourceCode sql code-with-copy"><code class="sourceCode sql"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">CREATE</span> <span class="kw">TABLE</span> gold.unlock_erros_agregados <span class="kw">AS</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>  user_id,</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">DATE</span>(event_timestamp) <span class="kw">AS</span> event_date,</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">COUNT</span>(<span class="op">*</span>) <span class="kw">AS</span> qtd_erros_unlock</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="kw">FROM</span> silver.unlock_erros</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a><span class="kw">GROUP</span> <span class="kw">BY</span> user_id, event_date;</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<p>Resume os eventos de erro por usuário e data, criando um indicador operacional que permite monitorar a qualidade do serviço ao longo do tempo.</p>
+</section>
+<section id="viagens-consolidadas-base-final" class="level5">
+<h5 data-anchor-id="viagens-consolidadas-base-final">Viagens Consolidadas (Base Final):</h5>
+<details>
+<summary>
+<strong>Mostar código SQL</strong>
+</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb8"><pre class="sourceCode sql code-with-copy"><code class="sourceCode sql"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">CREATE</span> <span class="kw">TABLE</span> gold.viagens_consolidadas <span class="kw">AS</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="kw">SELECT</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>  v.trip_id,</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>  v.project,</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>  v.customer_id,</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>  c.user_id,</span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>  v.start_time,</span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>  v.end_time,</span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>  v.duration_seconds,</span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>  v.invoice_id,</span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a>  <span class="co">-- FINANCEIRO</span></span>
+<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>  f.valor_total_fatura,</span>
+<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a>  f.qtd_itens_fatura,</span>
+<span id="cb8-17"><a href="#cb8-17" aria-hidden="true" tabindex="-1"></a>  f.invoice_status,</span>
+<span id="cb8-18"><a href="#cb8-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-19"><a href="#cb8-19" aria-hidden="true" tabindex="-1"></a>  <span class="co">-- OPERACIONAL</span></span>
+<span id="cb8-20"><a href="#cb8-20" aria-hidden="true" tabindex="-1"></a>  IFNULL(e.qtd_erros_unlock, <span class="dv">0</span>) <span class="kw">AS</span> qtd_erros_unlock,</span>
+<span id="cb8-21"><a href="#cb8-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-22"><a href="#cb8-22" aria-hidden="true" tabindex="-1"></a>  <span class="co">-- PERFIL DO CLIENTE</span></span>
+<span id="cb8-23"><a href="#cb8-23" aria-hidden="true" tabindex="-1"></a>  c.plan_type,</span>
+<span id="cb8-24"><a href="#cb8-24" aria-hidden="true" tabindex="-1"></a>  c.plan_periodicity,</span>
+<span id="cb8-25"><a href="#cb8-25" aria-hidden="true" tabindex="-1"></a>  c.qtd_planos,</span>
+<span id="cb8-26"><a href="#cb8-26" aria-hidden="true" tabindex="-1"></a>  c.max_plan_cost,</span>
+<span id="cb8-27"><a href="#cb8-27" aria-hidden="true" tabindex="-1"></a>  c.is_first_purchase</span>
+<span id="cb8-28"><a href="#cb8-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-29"><a href="#cb8-29" aria-hidden="true" tabindex="-1"></a><span class="kw">FROM</span> silver.viagens v</span>
+<span id="cb8-30"><a href="#cb8-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-31"><a href="#cb8-31" aria-hidden="true" tabindex="-1"></a><span class="kw">LEFT</span> <span class="kw">JOIN</span> gold.customers_resumo c</span>
+<span id="cb8-32"><a href="#cb8-32" aria-hidden="true" tabindex="-1"></a>  <span class="kw">ON</span> v.customer_id <span class="op">=</span> c.customer_id</span>
+<span id="cb8-33"><a href="#cb8-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-34"><a href="#cb8-34" aria-hidden="true" tabindex="-1"></a><span class="kw">LEFT</span> <span class="kw">JOIN</span> gold.faturas_agregadas f</span>
+<span id="cb8-35"><a href="#cb8-35" aria-hidden="true" tabindex="-1"></a>  <span class="kw">ON</span> v.invoice_id <span class="op">=</span> f.invoice_id</span>
+<span id="cb8-36"><a href="#cb8-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-37"><a href="#cb8-37" aria-hidden="true" tabindex="-1"></a><span class="kw">LEFT</span> <span class="kw">JOIN</span> gold.unlock_erros_agregados e</span>
+<span id="cb8-38"><a href="#cb8-38" aria-hidden="true" tabindex="-1"></a>  <span class="kw">ON</span> c.user_id <span class="op">=</span> e.user_id</span>
+<span id="cb8-39"><a href="#cb8-39" aria-hidden="true" tabindex="-1"></a> <span class="kw">AND</span> <span class="dt">DATE</span>(v.start_time) <span class="op">=</span> e.event_date;</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<p>Cria a base analítica final, com uma linha por viagem, integrando dados operacionais, financeiros e de clientes.</p>
+</section>
+</section>
+</section>
+<section id="disponibilização-para-análise" class="level2">
+<h2 data-anchor-id="disponibilização-para-análise">Disponibilização para Análise</h2>
+<p>A base consolidada foi exportada a partir do BigQuery e utilizada como fonte para as análises exploratórias e visualizações desenvolvidas em R, apresentadas a seguir.</p>
+</section>
+<section id="setup-e-bibliotecas" class="level2">
+<h2 data-anchor-id="setup-e-bibliotecas">Setup e Bibliotecas</h2>
+<div class="cell">
+<details class="code-fold">
+<summary>Show Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(tidyverse)</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(lubridate)</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(scales)</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(ggplot2)</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(DT)</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>fmt_brl <span class="ot">&lt;-</span> <span class="cf">function</span>(x) {</span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">paste0</span>(</span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>    <span class="st">"R$ "</span>,</span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>    <span class="fu">formatC</span>(</span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>      x,</span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>      <span class="at">format =</span> <span class="st">"f"</span>,</span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a>      <span class="at">big.mark =</span> <span class="st">"."</span>,</span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a>      <span class="at">decimal.mark =</span> <span class="st">","</span>,</span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a>      <span class="at">digits =</span> <span class="dv">2</span></span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+<section id="carga-e-tratamento-dos-dados" class="level2">
+<h2 data-anchor-id="carga-e-tratamento-dos-dados">Carga e Tratamento dos Dados</h2>
+<p>O dataset já contém registros consolidados de viagens, incluindo horários, faturamento, tipo de plano e indicadores de erro operacional.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Show Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>df <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>  <span class="st">"viagens_consolidadas.csv"</span>,</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">show_col_types =</span> <span class="cn">FALSE</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<p>Nesta etapa, realizamos:</p>
+<ul>
+<li>Conversão de colunas de data e hora</li>
+<li>Padronização de métricas de duração</li>
+<li>Criação de variáveis analíticas</li>
+</ul>
+<div class="cell">
+<details class="code-fold">
+<summary>Show Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>df <span class="ot">&lt;-</span> df <span class="sc">%&gt;%</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">start_time   =</span> <span class="fu">ymd_hms</span>(start_time),</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">end_time     =</span> <span class="fu">ymd_hms</span>(end_time),</span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">date         =</span> <span class="fu">as_date</span>(start_time),</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">duration_min =</span> duration_seconds <span class="sc">/</span> <span class="dv">60</span>,</span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">receita      =</span> <span class="fu">as.numeric</span>(valor_total_fatura),</span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">erro         =</span> qtd_erros_unlock <span class="sc">&gt;</span> <span class="dv">0</span></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>  )</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<section id="engenharia-de-features" class="level3">
+<h3 data-anchor-id="engenharia-de-features">Engenharia de Features</h3>
+<p>As seguintes variáveis derivadas foram criadas para enriquecer a análise:</p>
+<ul>
+<li><strong>Duração da viagem (minutos)</strong></li>
+<li><strong>Data da viagem</strong> para agregações temporais</li>
+<li><strong>Receita padronizada</strong></li>
+<li><strong>Indicador de erro operacional</strong></li>
+</ul>
+<p>Essas features são fundamentais para análises temporais e cálculo de indicadores de desempenho.</p>
+</section>
+</section>
+<section id="indicadores-chave-kpis" class="level2">
+<h2 data-anchor-id="indicadores-chave-kpis">Indicadores-Chave (KPIs)</h2>
+<p>Com base nos objetivos do negócio, foram definidos os seguintes KPIs:</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Show Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>total_viagens   <span class="ot">&lt;-</span> <span class="fu">nrow</span>(df)</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>usuarios_ativos <span class="ot">&lt;-</span> <span class="fu">n_distinct</span>(df<span class="sc">$</span>user_id, <span class="at">na.rm =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>duracao_mediana <span class="ot">&lt;-</span> <span class="fu">median</span>(df<span class="sc">$</span>duration_min, <span class="at">na.rm =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>receita_total   <span class="ot">&lt;-</span> <span class="fu">sum</span>(df<span class="sc">$</span>receita, <span class="at">na.rm =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>receita_media   <span class="ot">&lt;-</span> <span class="fu">mean</span>(df<span class="sc">$</span>receita, <span class="at">na.rm =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>taxa_erro       <span class="ot">&lt;-</span> <span class="fu">mean</span>(df<span class="sc">$</span>erro, <span class="at">na.rm =</span> <span class="cn">TRUE</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<section id="kpis" class="level3">
+<h3 data-anchor-id="kpis">KPIs</h3>
+<div class="grid gap-4">
+<div class="g-col-4 card">
+<p><span class="kpi-label">Total de Viagens</span> <span class="kpi-value">90,000</span></p>
+</div>
+<div class="g-col-4 card">
+<p><span class="kpi-label">Usuários Ativos</span> <span class="kpi-value">55,461</span></p>
+</div>
+<div class="g-col-4 card">
+<p><span class="kpi-label">Duração Típica da Viagem (mediana)</span> <span class="kpi-value">16.5</span></p>
+</div>
+<div class="g-col-4 card">
+<p><span class="kpi-label">Receita Total</span> <span class="kpi-value">R$ 174.578,65</span></p>
+</div>
+<div class="g-col-4 card">
+<p><span class="kpi-label">Receita Média por Viagem</span> <span class="kpi-value">R$ 11,58</span></p>
+</div>
+<div class="g-col-4 card">
+<p><span class="kpi-label">Taxa de Erro Operacional</span> <span class="kpi-value">24.0%</span></p>
+</div>
+</div>
+<p>Os indicadores oferecem uma visão rápida e estratégica do desempenho operacional da plataforma.</p>
+</section>
+</section>
+<section id="conclusão-e-próximos-passos" class="level2">
+<h2 data-anchor-id="conclusão-e-próximos-passos">Conclusão e Próximos Passos</h2>
+<p>A base analisada representa um snapshot operacional de um único dia. Dessa forma, análises temporais tradicionais (diária, semanal ou mensal) não seriam estatisticamente representativas neste contexto.</p>
+<p>Por esse motivo, a análise foi concentrada em indicadores agregados (KPIs), que oferecem uma visão clara e objetiva da utilização do sistema, desempenho financeiro e qualidade operacional no período analisado.</p>
+<section id="próximos-passos-sugeridos" class="level3">
+<h3 data-anchor-id="próximos-passos-sugeridos">Próximos Passos Sugeridos</h3>
+<ul>
+<li>Segmentação de usuários e planos, para identificar perfis de maior valor e padrões distintos de uso.</li>
+<li>Modelagem preditiva de demanda, visando otimização de frota e planejamento operacional.</li>
+<li>Análise de churn e retenção, especialmente em usuários afetados por falhas operacionais.</li>
+<li>Monitoramento de erros, com criação de alertas para redução de impacto na experiência do usuário.</li>
+</ul>
+</section>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>
